@@ -2,55 +2,65 @@
 class Laposta_Settings {
 
 	private $options;
-	private $status = 'unknown';
+	private $status = '';
 	private $lists;
 
 	public function __construct($options) {
 
 		$this->options = $options;
 
-		// if api-key is present, get available lists
-		if ($this->options['api_key']) {
+		// api-key present?
+		if (!$this->options['api_key']) {
+			$this->status = 'no_api_key';
+			return;
+		}
 
-			// include laposta api wrapper
-			include(sprintf("%s/../includes/laposta-php-1.2/lib/Laposta.php", dirname(__FILE__))); 
-			Laposta::setApiKey($this->options['api_key']);
+		// curl should be present
+		if (!function_exists('curl_init')) {
+			$this->status = 'no_url';
+			return;
+		}
 
-			$list = new Laposta_List();
-			try {
-				$result = $list->all();
-				//print '<pre>';print_r($result);print '</pre>';
+		// include laposta api wrapper
+		include(sprintf("%s/../includes/laposta-php-1.2/lib/Laposta.php", dirname(__FILE__))); 
+		Laposta::setApiKey($this->options['api_key']);
 
-				// lists present?
-				if (!$result['data']) {
-					$this->status = 'no_lists';
-				} else {
-					$this->lists = $result['data'];
-					$this->status = 'ok';
-				}
+		// try to fetch lists
+		$list = new Laposta_List();
+		try {
+			$result = $list->all();
+			//print '<pre>';print_r($result);print '</pre>';
 
-			} catch (Exception $e) {
+			// lists present?
+			if (!$result['data']) {
+				$this->status = 'no_lists';
+			} else {
+				$this->lists = $result['data'];
+				$this->status = 'ok';
+			}
 
-				// information about the error
-				$error = $e->json_body['error'];
-				//print_r($error);
+		} catch (Exception $e) {
+
+			// information about the error
+			$error = $e->json_body['error'];
+			//print_r($error);
+
+			if ($error) {
 
 				// invalid request?
 				if ($error['type'] == 'invalid_request') {
 
 					// this means api-key is incorrect
 					$this->status = 'invalid_api_key';
-				} else {
-
-
 				}
 			}
-		} else {
 
-			$this->status = 'no_api_key';
+			if (!$this->status) {
+
+				// different exception
+				$this->status = 'error-api: ' . print_r($e, 1);
+			}
 		}
-
-		//print "<br>status: " . $this->status;
 	}
 
 	public function getHtmlTitle() {
@@ -135,7 +145,13 @@ class Laposta_Settings {
 	private function getMessage() {
 	// return message based on status
 
+		if (strpos($this->status, 'error-api') !== false) {
+
+			// something went wrong with the api
+			return 'Contact met de api lukt niet. Mail deze foutmelding naar stijn@laposta.nl voor een oplossing.<br><pre>' . $this->status . '</pre>';
+		}
 		if ($this->status == 'no_api_key') return 'Nog geen api-key ingevuld.';
+		if ($this->status == 'no_curl') return 'Deze plugin heeft de php-curl extensie nodig, maar deze is niet geinstalleerd.';
 		if ($this->status == 'invalid_api_key') return 'Dit is geen geldige api-key.';
 		if ($this->status == 'no_lists') return 'Geen lijsten gevonden.';
 
